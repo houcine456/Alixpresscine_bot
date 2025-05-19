@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: alixpresscine-bot
+    env: python
+    plan: free
+    buildCommand: ""
+    startCommand: python main.py
+    envVars:
+      - key: BOT_TOKEN
+        value: "YOUR_BOT_TOKEN"
