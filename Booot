@@ -1,0 +1,99 @@
+import telebot
+import requests
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
+import time
+
+# إعدادات البوت
+BOT_TOKEN = '8073109522:AAE-kaIo1gGCUZD45Yo9jizkDd-MkF_egAw'
+RAPIDAPI_KEY = '0_2DL4DV3jcU1UOT7WGI1A4rY91'
+API_HOST = 'aliexpress-datahub.p.rapidapi.com'
+CHANNEL_USERNAME = '@alixpresscine'  # تأكد أن البوت أدمن في القناة
+
+bot = telebot.TeleBot(BOT_TOKEN)
+
+@bot.message_handler(func=lambda message: 'aliexpress.com' in message.text.lower())
+def handle_aliexpress_link(message):
+    original_url = message.text.strip()
+
+    headers = {
+        'x-rapidapi-key': RAPIDAPI_KEY,
+        'x-rapidapi-host': API_HOST
+    }
+
+    # استخراج itemId من الرابط
+    lookup_url = f'https://{API_HOST}/item_search_by_url?url={original_url}'
+    try:
+        lookup_response = requests.get(lookup_url, headers=headers, timeout=10)
+        lookup_json = lookup_response.json()
+        item_id = lookup_json.get('result', {}).get('itemId')
+        if not item_id:
+            bot.reply_to(message, "تعذر استخراج معرف المنتج من الرابط.")
+            return
+    except Exception as e:
+        bot.reply_to(message, "حدث خطأ أثناء معالجة الرابط.")
+        print(f"خطأ في استخراج itemId: {e}")
+        return
+
+    # جلب تفاصيل المنتج
+    detail_url = f'https://{API_HOST}/item_detail_2?itemId={item_id}'
+    try:
+        detail_response = requests.get(detail_url, headers=headers, timeout=10)
+        detail_json = detail_response.json()
+        product = detail_json.get('result')
+        if not product:
+            bot.reply_to(message, "لا يمكن الحصول على تفاصيل المنتج.")
+            return
+    except Exception as e:
+        bot.reply_to(message, "حدث خطأ أثناء جلب تفاصيل المنتج.")
+        print(f"خطأ في تفاصيل المنتج: {e}")
+        return
+
+    # استخراج البيانات
+    title = product.get('subject', 'اسم غير متوفر')
+    sale_price = product.get('salePrice', 'غير معروف')
+    original_price = product.get('originalPrice', 'غير معروف')
+    discount = product.get('discount', 'غير متوفر')
+    image_url = product.get('imageUrl') or ""
+
+    # إنشاء الرسالة
+    caption = f"""*تم العثور على هذا المنتج على AliExpress:*
+
+🛍️ *{title}*
+💲 *السعر الحالي:* {sale_price}
+❌ *السعر السابق:* {original_price}
+🔻 *نسبة التخفيض:* {discount}
+
+[رابط الشراء]({original_url})
+"""
+
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("شراء الآن", url=original_url))
+
+    # إرسال إلى القناة
+    try:
+        if image_url:
+            bot.send_photo(CHANNEL_USERNAME, image_url, caption=caption, parse_mode="Markdown", reply_markup=markup)
+        else:
+            bot.send_message(CHANNEL_USERNAME, caption, parse_mode="Markdown", reply_markup=markup)
+    except Exception as e:
+        print(f"خطأ أثناء النشر في القناة: {e}")
+
+    # إرسال للمستخدم
+    try:
+        if image_url:
+            bot.send_photo(message.chat.id, image_url, caption=caption, parse_mode="Markdown", reply_markup=markup)
+        else:
+            bot.send_message(message.chat.id, caption, parse_mode="Markdown", reply_markup=markup)
+    except Exception as e:
+        print(f"خطأ أثناء إرسال الرد للمستخدم: {e}")
+        bot.reply_to(message, "حدث خطأ أثناء إرسال معلومات المنتج.")
+
+# التشغيل المستمر مع الحماية من الأعطال
+while True:
+    try:
+        print("البوت يعمل الآن...")
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"خطأ في التشغيل: {e}")
+        print("إعادة التشغيل بعد 5 ثوانٍ...")
+        time.sleep(5)
